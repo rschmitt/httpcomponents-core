@@ -107,6 +107,7 @@ abstract class AbstractHttp1StreamDuplexer<IncomingMessage extends HttpMessage, 
 
     private volatile ProtocolVersion version;
     private volatile EndpointDetails endpointDetails;
+    private volatile boolean endOfStream;
 
     AbstractHttp1StreamDuplexer(
             final ProtocolIOSession ioSession,
@@ -269,6 +270,17 @@ abstract class AbstractHttp1StreamDuplexer<IncomingMessage extends HttpMessage, 
         return messageHead;
     }
 
+    private int fillBuffer() throws IOException {
+        final int bytesRead = inbuf.fill(ioSession);
+        if (bytesRead > 0) {
+            inTransportMetrics.incrementBytesTransferred(bytesRead);
+        }
+        if (bytesRead == -1) {
+            endOfStream = true;
+        }
+        return bytesRead;
+    }
+
     public final void onInput(final ByteBuffer src) throws HttpException, IOException {
         if (src != null) {
             final int n = src.remaining();
@@ -281,17 +293,9 @@ abstract class AbstractHttp1StreamDuplexer<IncomingMessage extends HttpMessage, 
             return;
         }
 
-        boolean endOfStream = false;
-        if (incomingMessage == null) {
-            final int bytesRead = inbuf.fill(ioSession);
-            if (bytesRead > 0) {
-                inTransportMetrics.incrementBytesTransferred(bytesRead);
-            }
-            endOfStream = bytesRead == -1;
-        }
-
         do {
             if (incomingMessage == null) {
+                fillBuffer();
 
                 final IncomingMessage messageHead = parseMessageHead(endOfStream);
                 if (messageHead != null) {
@@ -346,6 +350,7 @@ abstract class AbstractHttp1StreamDuplexer<IncomingMessage extends HttpMessage, 
                     incomingMessage = null;
                     ioSession.setEvent(SelectionKey.OP_READ);
                     inputEnd();
+                    fillBuffer();
                 } else if (bytesRead == 0) {
                     break;
                 }
@@ -579,7 +584,7 @@ abstract class AbstractHttp1StreamDuplexer<IncomingMessage extends HttpMessage, 
 
     @Override
     public boolean isOpen() {
-        return connState.compareTo(ConnectionState.ACTIVE) <= 0;
+        return connState.compareTo(ConnectionState.ACTIVE) <= 0 && !endOfStream;
     }
 
     @Override
