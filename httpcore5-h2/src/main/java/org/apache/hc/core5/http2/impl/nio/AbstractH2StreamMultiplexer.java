@@ -41,11 +41,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.SSLSession;
-
 import org.apache.hc.core5.concurrent.CancellableDependency;
+import org.apache.hc.core5.concurrent.FutureCallback;
 import org.apache.hc.core5.http.ConnectionClosedException;
 import org.apache.hc.core5.http.EndpointDetails;
 import org.apache.hc.core5.http.Header;
@@ -65,6 +64,7 @@ import org.apache.hc.core5.http.nio.AsyncPushProducer;
 import org.apache.hc.core5.http.nio.HandlerFactory;
 import org.apache.hc.core5.http.nio.command.ExecutableCommand;
 import org.apache.hc.core5.http.nio.command.ShutdownCommand;
+import org.apache.hc.core5.http.nio.command.StaleCheckCommand;
 import org.apache.hc.core5.http.protocol.HttpCoreContext;
 import org.apache.hc.core5.http.protocol.HttpProcessor;
 import org.apache.hc.core5.http2.H2ConnectionException;
@@ -410,6 +410,23 @@ abstract class AbstractH2StreamMultiplexer implements Identifiable, HttpConnecti
         }
     }
 
+    void doStalecheck(final FutureCallback<Boolean> callback) throws IOException {
+        if (!ioSession.isOpen() || connState.compareTo(ConnectionHandshake.ACTIVE) > 0) {
+            callback.completed(false);
+        }
+        final ByteBuffer buffer = ByteBuffer.allocate(0);
+        final int bytesRead = ioSession.channel().read(buffer);
+        if (bytesRead == -1) {
+            if (connState == ConnectionHandshake.ACTIVE) {
+                connState = ConnectionHandshake.GRACEFUL_SHUTDOWN;
+            }
+            requestSessionOutput();
+            callback.completed(false);
+        } else {
+            callback.completed(true);
+        }
+    }
+
     public final void onConnect() throws HttpException, IOException {
         connState = ConnectionHandshake.ACTIVE;
         final RawFrame settingsFrame = frameFactory.createSettings(
@@ -647,6 +664,8 @@ abstract class AbstractH2StreamMultiplexer implements Identifiable, HttpConnecti
                 if (!outputQueue.isEmpty()) {
                     return;
                 }
+            } else if (command instanceof StaleCheckCommand) {
+                doStalecheck(((StaleCheckCommand) command).getCallback());
             }
         }
     }
