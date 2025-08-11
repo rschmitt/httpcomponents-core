@@ -52,6 +52,7 @@ public final class StaleCheckCommand implements Command {
 
     @Override
     public boolean cancel() {
+        callback.cancelled();
         return true;
     }
 
