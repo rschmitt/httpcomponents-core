@@ -33,7 +33,9 @@ import org.apache.hc.core5.reactor.Command;
 import org.apache.hc.core5.util.Args;
 
 /**
- * Stale check command.
+ * Stale check command. The {@code callback} will be invoked after the client's event loop has finished processing
+ * all pending reads on the connection. If the connection is still active at that point, the callback will be completed
+ * with {@code true}. In any other event, the callback will be cancelled, failed, or completed with {@code false}.
  *
  * @since 5.4
  */
