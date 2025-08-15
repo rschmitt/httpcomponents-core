@@ -413,15 +413,6 @@ abstract class AbstractH2StreamMultiplexer implements Identifiable, HttpConnecti
     void doStalecheck(final FutureCallback<Boolean> callback) throws IOException {
         if (!ioSession.isOpen() || connState.compareTo(ConnectionHandshake.ACTIVE) > 0) {
             callback.completed(false);
-        }
-        final ByteBuffer buffer = ByteBuffer.allocate(0);
-        final int bytesRead = ioSession.channel().read(buffer);
-        if (bytesRead == -1) {
-            if (connState == ConnectionHandshake.ACTIVE) {
-                connState = ConnectionHandshake.GRACEFUL_SHUTDOWN;
-            }
-            requestSessionOutput();
-            callback.completed(false);
         } else {
             callback.completed(true);
         }
