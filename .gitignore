@@ -4,6 +4,7 @@
 .pydevproject
 .clover
 target
+build
 maven-eclipse.xml
 .idea
 *.iml
