@@ -863,8 +863,15 @@ abstract class Http1IntegrationTest extends HttpIntegrationTest {
         final ExecutionException exception = Assertions.assertThrows(ExecutionException.class, () ->
                 future1.get(TIMEOUT.getDuration(), TIMEOUT.getTimeUnit()));
         final Throwable cause = exception.getCause();
-        Assertions.assertInstanceOf(MalformedChunkCodingException.class, cause);
-        Assertions.assertEquals("garbage", entityConsumer.generateContent());
+        // The server aborts the connection in the middle of a chunked-encoded response. Depending on
+        // the TCP/TLS timing of the abrupt close, the client may either observe a clean EOF mid-chunk
+        // (decoded as MalformedChunkCodingException) or a connection reset surfaced as a generic
+        // IOException (e.g. SocketException). Both outcomes correctly indicate that the chunked
+        // response was not delivered intact.
+        Assertions.assertInstanceOf(IOException.class, cause);
+        if (cause instanceof MalformedChunkCodingException) {
+            Assertions.assertEquals("garbage", entityConsumer.generateContent());
+        }
     }
 
     @ParameterizedTest
